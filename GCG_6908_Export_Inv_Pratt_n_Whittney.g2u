@@ -1,0 +1,282 @@
+﻿Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+'Bryan Pham
+'09/21/2022
+'Customer: MERIDEN MANUFACTURING
+'Call: MER100-83020221335-0
+'Scope: export inventory with WOs info for Pratt and Whittney.
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+v.Local.sPart.Declare
+v.Local.sCust.Declare
+v.Local.sWO_Cat.Declare
+v.Local.sSQL.Declare
+v.Local.sRet.Declare
+v.Local.sFieldList.Declare
+V.Local.sPath.Declare
+
+f.ODBC.Connection!con.OpenCompanyConnection(900)
+f.Intrinsic.Control.CallSub(checkTable)
+f.Intrinsic.Control.CallSub(checkFolder)
+f.Intrinsic.Control.SelectCase(v.Caller.Hook)
+	'inventory populate
+	f.Intrinsic.Control.Case(10120)
+		V.Passed.GAB-LBL-1.Set("Cust. No")
+		F.Intrinsic.UI.ChangeCallerProperty(Variable.Passed.GAB-LBL-1, "HIDE", 0)
+		F.Intrinsic.Variable.SetProperty("GAB-LBL-1",PL,160)
+		F.Intrinsic.Variable.SetProperty("GAB-LBL-1",PT,110)
+		
+		F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-TEXT-1, "HIDE", 0)
+		F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-TEXT-1, "LOCK", 0)
+		F.Intrinsic.Variable.SetProperty("GAB-TEXT-1",PL,160)
+		F.Intrinsic.Variable.SetProperty("GAB-TEXT-1",PT,127)
+		
+		V.Passed.GAB-LBL-2.Set("WO Cat.")
+		F.Intrinsic.UI.ChangeCallerProperty(Variable.Passed.GAB-LBL-2, "HIDE", 0)
+		F.Intrinsic.Variable.SetProperty("GAB-LBL-2",PL,310)
+		F.Intrinsic.Variable.SetProperty("GAB-LBL-2",PT,110)
+		
+		F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-TEXT-2, "HIDE", 0)
+		F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-TEXT-2, "LOCK", 0)
+		F.Intrinsic.Variable.SetProperty("GAB-TEXT-2",PL,310)
+		F.Intrinsic.Variable.SetProperty("GAB-TEXT-2",PT,127)
+	'inventory load part		
+	f.Intrinsic.Control.Case(10125)
+		f.Intrinsic.String.GSSPartString(v.Passed.000007,v.Passed.000008,v.Local.sPart)
+		f.Intrinsic.String.Build("Select CUST_NO, WO_CAT from GCG_6908_PART_INFO where RTRIM(PART) = '{0}'",v.Local.sPart.Trim,v.Local.sSQL)
+		f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL,v.Local.sRet)
+		f.Intrinsic.Control.If(v.Ambient.ExecuteAndReturnEOF,=,False)
+			f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+			V.Passed.GAB-TEXT-1.Set(v.Local.sRet(0))
+			V.Passed.GAB-TEXT-2.Set(v.Local.sRet(1))
+		f.Intrinsic.Control.EndIf
+	'inventory save	
+	f.Intrinsic.Control.Case(10170)
+		f.Intrinsic.String.GSSPartString(v.Passed.000007,v.Passed.000008,v.Local.sPart)
+		f.Intrinsic.Control.If(V.Passed.GAB-TEXT-1,<>,"",or,V.Passed.GAB-TEXT-2,<>,"")
+			f.Intrinsic.String.Build("Select* from GCG_6908_PART_INFO where RTRIM(PART) = '{0}'",v.Local.sPart.Trim,v.Local.sSQL)
+			f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL,v.Local.sRet)
+			f.Intrinsic.Control.If(v.Ambient.ExecuteAndReturnEOF,=,False)
+				f.Intrinsic.String.Build("Update GCG_6908_PART_INFO set CUST_NO = '{0}',WO_CAT = '{1}' where RTRIM(PART) = '{2}'",V.Passed.GAB-TEXT-1,V.Passed.GAB-TEXT-2,v.Local.sPart.PSQLFriendly,v.Local.sSQL)
+			f.Intrinsic.Control.Else
+				f.Intrinsic.String.Build("Insert into GCG_6908_PART_INFO values('{0}','{1}','{2}')",v.Local.sPart.PSQLFriendly,V.Passed.GAB-TEXT-1,V.Passed.GAB-TEXT-2,v.Local.sSQL)
+			f.Intrinsic.Control.EndIf
+			f.ODBC.Connection!con.Execute(v.Local.sSQL)
+		f.Intrinsic.Control.EndIf
+		
+	f.Intrinsic.Control.CaseElse
+		f.Intrinsic.Control.CallSub("Export_Data")
+f.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.checkTable.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+V.Local.bTable.Declare(Boolean)
+v.Local.sDate_Action.Declare
+v.Local.sFileTarget.Declare
+F.ODBC.Connection!con.TableExists("GCG_6908_PART_INFO",V.Local.bTable)
+F.Intrinsic.Control.If(V.Local.bTable,=,False)
+	F.ODBC.Connection!Con.Execute("CREATE TABLE GCG_6908_PART_INFO(PART CHAR(20),CUST_NO CHAR(10),WO_CAT CHAR(1));")
+F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Format(v.Ambient.Date,"MMDDYY",v.Local.sDate_Action)
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}\LOG\Error_{2}.txt",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sDate_Action,v.Local.sFileTarget)
+	f.Intrinsic.File.String2File(v.local.sFileTarget,V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.checkTable.End
+
+Program.Sub.Export_Data.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+v.Local.sSQL.Declare
+V.Local.sPath.Declare
+v.Local.dDate.Declare
+v.Local.sDate_Action.Declare
+v.Local.sFileTarget.Declare
+v.Local.iCnt.Declare
+v.Local.sFieldList.Declare
+v.Local.sString.Declare
+
+V.Local.sVendors.Declare
+
+f.Intrinsic.UI.InvokeWaitDialog("Exporting inventory info for Pratt and Whittney...","Please wait")
+f.Intrinsic.Date.DateAdd("D",-30,v.Ambient.Date,v.Local.dDate)
+
+V.Local.sVendors.Set("13633*!*3000087")
+F.Intrinsic.String.Replace(V.Local.sVendors,"*!*","','",V.Local.sVendors)
+
+'get all the parts from customner 13633
+'f.Intrinsic.String.Build("Select distinct RTRIM(LEFT(A.PART,17)) as Part_Material_Number_Buyer,'' as Doc_Number_DemandReference_Buyer,'' as SchedLine, '' as Buyer_Plant_No, RTRIM(A.CUST_NO) as Vendor_Code_Buyer_Supplier_Reference, '' as Assembly_Work_Order_Reference, case when JOB <> '' then  JOB+ '-' +SUFFIX else 'Dummy_WO' end as Work_Production_Order_No_Supplier, '' as Work_Order_Category, cast(0 as double) as Current_Production_Step, cast(0 as double) as TotalNumber_Production_Steps, '' as Production_Lead_Time, case when isnull(C.DATE_START, '1900-01-01') = '1900-01-01' then '' else LEFT(C.DATE_START,10) end as Planned_Production_Start_Date, case when isnull(C.DATE_DUE, '1900-01-01') = '1900-01-01' then '' else LEFT(C.DATE_DUE,10) end as Planned_Production_End_Date,'' as Updated_Planned_Production_End_Date, '' as Actual_Production_Start_Date, case when isnull(C.DATE_CLOSED, '1900-01-01') = '1900-01-01' then '' else LEFT(C.DATE_CLOSED,10) end as Actual_Production_End_Date,cast(C.QTY_ORDER as int) as Planned_Production_Qty,cast(C.QTY_ORDER as int) as Actual_Start_Production_Qty, cast (0 as int) as Current_Work_Order_Qty, '' as Actual_End_Production_Qty,case when JOB <> '' then  'Work in Progress' else 'Stock' end as  Work_Order_Status,cast(D.QTY_ONHAND as int) as Finished_Components_in_Storage_Qty, '' as Finished_Components_in_Transit_Qty,'' as Supplier_Input_Material_Qty, '' as  Supplier_Input_Material_on_Order_Qty, '' as Input_Material_Lead_Time_cal_days, '' as Input_Material_Order_Date, '' as Input_Material_Expected_Delivery_Date from GCG_6908_PART_INFO A full outer join V_JOB_HEADER C on A.PART = C.PART left join V_INVENTORY_MSTR D on A.PART = D.PART  where (isnull(C.DATE_CLOSED, '1900-01-01') = '1900-01-01' or isnull(C.DATE_CLOSED, '1900-01-01') > '{0}') and RTRIM(A.CUST_NO) = '13633'",v.Local.dDate.PervasiveDate,v.Local.sSQL)
+
+'f.Intrinsic.String.Build("Select distinct RTRIM(LEFT(A.PART,17)) as Part_Material_Number_Buyer,'' as Doc_Number_DemandReference_Buyer,'' as SchedLine, '' as Buyer_Plant_No, RTRIM(A.CUST_NO) as Vendor_Code_Buyer_Supplier_Reference, '' as Assembly_Work_Order_Reference, case when JOB <> '' then  JOB+ '-' +SUFFIX else 'Dummy_WO' end as Work_Production_Order_No_Supplier, '' as Work_Order_Category, cast(0 as double) as Current_Production_Step, cast(0 as double) as TotalNumber_Production_Steps, '' as Production_Lead_Time, case when isnull(C.DATE_START, '1900-01-01') = '1900-01-01' then '' else LEFT(C.DATE_START,10) end as Planned_Production_Start_Date, case when isnull(C.DATE_DUE, '1900-01-01') = '1900-01-01' then '' else LEFT(C.DATE_DUE,10) end as Planned_Production_End_Date,'' as Updated_Planned_Production_End_Date, '' as Actual_Production_Start_Date, case when isnull(C.DATE_CLOSED, '1900-01-01') = '1900-01-01' then '' else LEFT(C.DATE_CLOSED,10) end as Actual_Production_End_Date,cast(C.QTY_ORDER as int) as Planned_Production_Qty,cast(C.QTY_ORDER as int) as Actual_Start_Production_Qty, cast (0 as int) as Current_Work_Order_Qty, '' as Actual_End_Production_Qty,case when JOB <> '' then  'Work in Progress' else 'Stock' end as  Work_Order_Status, '' as Finished_Components_in_Transit_Qty,'' as Supplier_Input_Material_Qty, '' as  Supplier_Input_Material_on_Order_Qty, '' as Input_Material_Lead_Time_cal_days, '' as Input_Material_Order_Date, '' as Input_Material_Expected_Delivery_Date from GCG_6908_PART_INFO A full outer join V_JOB_HEADER C on A.PART = C.PART where (isnull(C.DATE_CLOSED, '1900-01-01') = '1900-01-01' or isnull(C.DATE_CLOSED, '1900-01-01') > '{0}') and RTRIM(A.CUST_NO) = '13633'",v.Local.dDate.PervasiveDate,v.Local.sSQL)
+
+f.Intrinsic.String.Build("Select distinct RTRIM(LEFT(A.PART,17)) as Part_Material_Number_Buyer,'' as Doc_Number_DemandReference_Buyer,'' as SchedLine, '' as Buyer_Plant_No, RTRIM(A.CUST_NO) as Vendor_Code_Buyer_Supplier_Reference, '' as Assembly_Work_Order_Reference, case when isnull(JOB,'') <> '' then  JOB+ '-' +SUFFIX else 'Dummy_WO' end as Work_Production_Order_No_Supplier, A.WO_CAT as Work_Order_Category, cast(0 as double) as Current_Production_Step, cast(0 as double) as TotalNumber_Production_Steps, '' as Production_Lead_Time, case when isnull(C.DATE_START, '1900-01-01') = '1900-01-01' then '' else LEFT(C.DATE_START,10) end as Planned_Production_Start_Date, case when isnull(C.DATE_DUE, '1900-01-01') = '1900-01-01' then '' else LEFT(C.DATE_DUE,10) end as Planned_Production_End_Date,'' as Updated_Planned_Production_End_Date, '' as Actual_Production_Start_Date, case when isnull(C.DATE_CLOSED, '1900-01-01') = '1900-01-01' then '' else LEFT(C.DATE_CLOSED,10) end as Actual_Production_End_Date,cast(isnull(C.QTY_ORDER,0) as int) as Planned_Production_Qty,cast(isnull(C.QTY_ORDER,0) as int) as Actual_Start_Production_Qty, cast (0 as int) as Current_Work_Order_Qty, '' as Actual_End_Production_Qty,case when isnull(JOB,'') <> '' then  'Work in Progress' else 'Stock' end as  Work_Order_Status,cast(isnull(D.QTY_ONHAND,0) as int) as Finished_Components_in_Storage_Qty, '' as Finished_Components_in_Transit_Qty,'' as Supplier_Input_Material_Qty, '' as  Supplier_Input_Material_on_Order_Qty, '' as Input_Material_Lead_Time_cal_days, '' as Input_Material_Order_Date, '' as Input_Material_Expected_Delivery_Date from GCG_6908_PART_INFO A left join V_JOB_HEADER C on A.PART = C.PART left join V_INVENTORY_MSTR D on A.PART = D.PART  where (isnull(C.DATE_CLOSED, '1900-01-01') = '1900-01-01' or isnull(C.DATE_CLOSED, '1900-01-01') > '{0}' or C.DATE_CLOSED is not null) and RTRIM(A.CUST_NO) in ('{1}')",v.Local.dDate.PervasiveDate,V.Local.sVendors,v.Local.sSQL)
+
+f.Data.DataTable.CreateFromSQL("dtExport","con",v.Local.sSQL,true)
+
+'total steps
+f.Data.Dictionary.CreateFromSQL("dTotalSteps","con","Select JOB+ '-' + SUFFIX, count(*) from V_JOB_OPERATIONS where LMO = 'L' and SEQ < 990000 group by JOB+ '-' + SUFFIX;")
+f.Data.Dictionary.SetDefaultReturn("dTotalSteps",0)
+f.Data.DataTable.FillFromDictionary("dtExport","dTotalSteps","Work_Production_Order_No_Supplier","TotalNumber_Production_Steps")
+
+'current step
+f.Data.DataTable.CreateFromSQL("dtCurStep_Temp","con","Select JOB+ '-' + SUFFIX as JS, count(*)+1 as Current_Step from V_JOB_OPERATIONS where LMO = 'L' and FLAG_CLOSED = 'Y' and SEQ < 990000 group by JOB+ '-' + SUFFIX;")
+f.Data.DataTable.AddColumn("dtCurStep_Temp","TotalSteps","Float")
+f.Data.DataTable.FillFromDictionary("dtCurStep_Temp","dTotalSteps","JS","TotalSteps")
+'f.Data.DataTable.AddExpressionColumn("dtCurStep_Temp","Final","Float","IIF([TotalSteps] < [Current_Step],0,1)")
+f.Data.DataTable.AddExpressionColumn("dtCurStep_Temp","Final","Float","IIF([TotalSteps] < [Current_Step],[TotalSteps],[Current_Step])")
+
+
+f.Data.Dictionary.createFromDatatable("dCurSteps","dtCurStep_Temp","JS","Final")
+f.Data.Dictionary.SetDefaultReturn("dCurSteps",0)
+f.Data.DataTable.FillFromDictionary("dtExport","dCurSteps","Work_Production_Order_No_Supplier","Current_Production_Step")
+f.Data.Dictionary.Close("dCurSteps")
+f.Data.Dictionary.Close("dTotalSteps")
+
+'Actual_Production_Start_Date
+f.Data.Dictionary.CreateFromSQL("dActProdStartDate","con","Select JOB+ '-' + SUFFIX, LEFT(DATE_SEQUENCE,10) from V_JOB_DETAIL where DATE_SEQUENCE in (select min(DATE_SEQUENCE) from V_JOB_DETAIL group by JOB,SUFFIX) order by job,suffix;")
+f.Data.Dictionary.SetDefaultReturn("dActProdStartDate","")
+f.Data.DataTable.FillFromDictionary("dtExport","dActProdStartDate","Work_Production_Order_No_Supplier","Actual_Production_Start_Date")
+f.Data.Dictionary.Close("dActProdStartDate")
+
+'Current_Work_Order_Qty
+f.Data.Dictionary.CreateFromSQL("dCurWOQty","con","Select JOB+ '-' + SUFFIX, cast(PIECES_COMPLTD as int) as PIECES_COMPLTD from V_JOB_DETAIL where DATE_SEQUENCE in (select min(DATE_SEQUENCE) from V_JOB_DETAIL where LMO = 'L' group by JOB,SUFFIX) order by job,suffix,DATE_SEQUENCE;")
+f.Data.Dictionary.SetDefaultReturn("dCurWOQty",0)
+f.Data.DataTable.FillFromDictionary("dtExport","dCurWOQty","Work_Production_Order_No_Supplier","Current_Work_Order_Qty")
+f.Data.Dictionary.Close("dCurWOQty")
+
+f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataTable.dtExport.RowCount--,1)
+	'if it is at the lastest step or acutal end date has a value --> the WO is completed
+	f.Intrinsic.Control.If(v.DataTable.dtExport(v.Local.iCnt).TotalNumber_Production_Steps!FieldValFloat,=,v.DataTable.dtExport(v.Local.iCnt).Current_Production_Step!FieldValFloat,or,v.DataTable.dtExport(v.Local.iCnt).Actual_Production_End_Date!FieldValTrim,<>,"")
+		f.Data.DataTable.SetValue("dtExport",v.Local.iCnt,"Work_Order_Status","Completed")
+	f.Intrinsic.Control.EndIf
+	
+'	f.Intrinsic.Control.If(v.DataTable.dtExport(v.Local.iCnt).TotalNumber_Production_Steps!FieldValFloat,=,v.DataTable.dtExport(v.Local.iCnt).Current_Production_Step!FieldValFloat)
+'		f.Data.DataTable.SetValue("dtExport",v.Local.iCnt,"Work_Order_Status","Completed")
+'	f.Intrinsic.Control.EndIf
+	
+	'if there is no current production step --> job is planned
+	f.Intrinsic.Control.If(v.DataTable.dtExport(v.Local.iCnt).Current_Production_Step!FieldValFloat,=,0)
+		f.Data.DataTable.SetValue("dtExport",v.Local.iCnt,"Work_Order_Status","Planned")
+	f.Intrinsic.Control.EndIf
+	
+f.Intrinsic.Control.Next(v.Local.iCnt)
+
+'Saving CSV file
+Function.Intrinsic.String.Format(v.Ambient.Date,"MMDDYY",v.Local.sDate_Action)
+f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}\PnW_CAN\Inv_Report_{2}.csv",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sDate_Action,V.Local.sPath)
+'f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}\PnW_US\Inv_Report_{2}.csv",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sDate_Action,V.Local.sPath)
+
+f.Data.DataView.Create("dtExport","dvExport")
+v.Local.sFieldList.Set(v.DataTable.dtExport.FieldNames)
+f.Data.DataView.ToString("dtExport","dvExport",v.Local.sFieldList,",",v.Ambient.NewLine,v.Local.sString)
+f.Intrinsic.String.Replace(v.Local.sFieldList,"*!*",",",v.Local.sFieldList)
+f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sFieldList,v.Ambient.NewLine,v.Local.sString,v.Local.sString)
+
+f.Intrinsic.File.String2File(v.Local.sPath,v.Local.sString)
+
+F.Data.DataTable.Close("dtExport")
+
+F.ODBC.Connection!con.Close
+f.Intrinsic.UI.CloseWaitDialog
+
+
+f.Intrinsic.Control.CallSub(sendEmail)
+f.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Format(v.Ambient.Date,"MMDDYY",v.Local.sDate_Action)
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}\LOG\Error_{2}.txt",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sDate_Action,v.Local.sFileTarget)
+	f.Intrinsic.File.String2File(v.local.sFileTarget,V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Export_Data.End
+
+Program.Sub.sendEmail.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+v.Local.sAttach.Declare
+v.Local.sDate_Action.Declare
+v.Local.bExist.Declare
+v.Local.sFileTarget.Declare
+
+Function.Intrinsic.String.Format(v.Ambient.Date,"MMDDYY",v.Local.sDate_Action)
+f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}\PnW_CAN\Inv_Report_{2}.csv",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sDate_Action,v.Local.sAttach)
+f.Intrinsic.File.Exists(v.Local.sAttach,v.local.bExist)
+f.Intrinsic.Control.If(v.Local.bExist)
+	f.Intrinsic.String.Build("Inv_Report_{2}.csv*!*{0}\CUSTOM\6908\{1}\PnW_CAN\",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sDate_Action,v.Local.sAttach)
+	F.Global.Messaging.QueueMessage(V.Caller.CompanyCode,0,"ARC 6908","Inventory Report - Meriden for Pratt and Whitney CAN","aron@meridenmfg.com","pwcdataupload@scpm.supplyon.com","Inventory Report - Meriden for Pratt and Whitney CAN",5,"",False,"","","","","","","",v.Local.sAttach,False,)
+	'pwcdataupload@scpm.supplyon.com
+f.Intrinsic.Control.EndIf
+
+
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Format(v.Ambient.Date,"MMDDYY",v.Local.sDate_Action)
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}\LOG\Error_{2}.txt",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sDate_Action,v.Local.sFileTarget)
+	f.Intrinsic.File.String2File(v.local.sFileTarget,V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.sendEmail.End
+
+Program.Sub.checkFolder.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+v.Local.sFileTarget.Declare
+v.Local.bExists.Declare
+v.Local.sDate_Action.Declare
+
+'create custom folder for backing up files
+f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sFileTarget)
+f.Intrinsic.File.DirExists(v.Local.sFileTarget,v.Local.bExists)
+f.Intrinsic.Control.If(v.Local.bExists,=,False)
+	f.Intrinsic.File.CreateDir(v.Local.sFileTarget)
+f.Intrinsic.Control.EndIf
+
+f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}\PnW_CAN",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sFileTarget)
+f.Intrinsic.File.DirExists(v.Local.sFileTarget,v.Local.bExists)
+f.Intrinsic.Control.If(v.Local.bExists,=,False)
+	f.Intrinsic.File.CreateDir(v.Local.sFileTarget)
+f.Intrinsic.Control.EndIf
+
+f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}\PnW_US",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sFileTarget)
+f.Intrinsic.File.DirExists(v.Local.sFileTarget,v.Local.bExists)
+f.Intrinsic.Control.If(v.Local.bExists,=,False)
+	f.Intrinsic.File.CreateDir(v.Local.sFileTarget)
+f.Intrinsic.Control.EndIf
+
+
+f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}\LOG",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sFileTarget)
+f.Intrinsic.File.DirExists(v.Local.sFileTarget,v.Local.bExists)
+f.Intrinsic.Control.If(v.Local.bExists,=,False)
+	f.Intrinsic.File.CreateDir(v.Local.sFileTarget)
+f.Intrinsic.Control.EndIf
+
+
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Format(v.Ambient.Date,"MMDDYY",v.Local.sDate_Action)
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	f.Intrinsic.String.Build("{0}\CUSTOM\6908\{1}\LOG\Error_{2}.txt",v.Caller.GlobalDir,v.Caller.CompanyCode,v.Local.sDate_Action,v.Local.sFileTarget)
+	f.Intrinsic.File.String2File(v.local.sFileTarget,V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.checkFolder.End
+
+Program.Sub.Comments.Start
+${$5$}$20.1.8543.32295$}$1
+${$6$}$bbaker$}$20230628093146736$}$pM7xsHplA2E9VCTenDTJ47gi1rF/t66WKSZhV3AaS6m4NcsCqaARjhpVANv83bEJoEfOMdi3ztA=
+Program.Sub.Comments.End
